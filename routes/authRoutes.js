@@ -50,3 +50,9 @@ router.get(
     });
   }
 );
+
+router.post("/logout", authMiddleware, (req, res) => {
+  res.status(200).json({
+    message: "Logout successful",
+  });
+});
