@@ -1,5 +1,8 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
+const roleMiddleware = require("../middleware/roleMiddleware");
+const adminMiddleware = require("../middleware/adminMiddleware");
+const studentMiddleware = require("../middleware/studentMiddleware");
 
 const {
   registerUser,
@@ -19,6 +22,30 @@ router.get(
   (req, res) => {
     res.status(200).json({
       message: "Protected route accessed",
+      user: req.user,
+    });
+  }
+);
+
+router.get(
+  "/student-only",
+  authMiddleware,
+  studentMiddleware,
+  (req, res) => {
+    res.status(200).json({
+      message: "Welcome Student!",
+      user: req.user,
+    });
+  }
+);
+
+router.get(
+  "/admin-only",
+  authMiddleware,
+  adminMiddleware,
+  (req, res) => {
+    res.status(200).json({
+      message: "Welcome Admin!",
       user: req.user,
     });
   }
