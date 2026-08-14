@@ -1,13 +1,11 @@
 const express = require("express");
 
 const {
-  createQuiz,
-  updateQuiz,
-  deleteQuiz,
-  publishQuiz,
-  getQuizzes,   
-  getPublishedQuizzes,
-} = require("../controllers/quizController");
+  createCategory,
+  getCategories,
+  updateCategory,
+  deleteCategory,
+} = require("../controllers/categoryController");
 
 const authMiddleware = require("../middleware/authMiddleware");
 const adminMiddleware = require("../middleware/adminMiddleware");
@@ -18,42 +16,28 @@ router.post(
   "/",
   authMiddleware,
   adminMiddleware,
-  createQuiz
-);
-
-router.put(
-  "/:id",
-  authMiddleware,
-  adminMiddleware,
-  updateQuiz
-);
-
-
-router.delete(
-  "/:id",
-  authMiddleware,
-  adminMiddleware,
-  deleteQuiz
-);
-
-router.patch(
-  "/:id/publish",
-  authMiddleware,
-  adminMiddleware,
-  publishQuiz
-);
-
-router.get(
-  "/published",
-  authMiddleware,
-  getPublishedQuizzes
+  createCategory
 );
 
 router.get(
   "/",
   authMiddleware,
   adminMiddleware,
-  getQuizzes
+  getCategories
+);
+
+router.put(
+  "/:id",
+  authMiddleware,
+  adminMiddleware,
+  updateCategory
+);
+
+router.delete(
+  "/:id",
+  authMiddleware,
+  adminMiddleware,
+  deleteCategory
 );
 
 module.exports = router;

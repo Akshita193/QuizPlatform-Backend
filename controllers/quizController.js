@@ -175,10 +175,40 @@ const getQuizzes = async (req, res) => {
   }
 };
 
+// Get published quizzes for normal users
+const getPublishedQuizzes = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+        id,
+        title,
+        description,
+        created_by,
+        is_published,
+        created_at,
+        updated_at
+       FROM quizzes
+       WHERE is_published = true
+       ORDER BY created_at DESC`
+    );
+
+    res.status(200).json({
+      quizzes: result.rows,
+    });
+  } catch (error) {
+    console.error("Get published quizzes error:", error);
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createQuiz,
   updateQuiz,
   deleteQuiz,
   publishQuiz,
   getQuizzes,
+  getPublishedQuizzes,
 };

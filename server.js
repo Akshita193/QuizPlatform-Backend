@@ -6,6 +6,8 @@ const pool = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const quizRoutes = require("./routes/quizRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
+const questionRoutes = require("./routes/questionRoutes");
 
 const app = express();
 
@@ -26,6 +28,8 @@ pool.query("SELECT NOW()", (err, result) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/quizzes", quizRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/questions", questionRoutes);
 
 // Home route
 app.get("/", (req, res) => {
