@@ -7,6 +7,7 @@ const {
   publishQuiz,
   getQuizzes,   
   getPublishedQuizzes,
+  getPublishedQuizQuestions,
 } = require("../controllers/quizController");
 
 const authMiddleware = require("../middleware/authMiddleware");
@@ -47,6 +48,12 @@ router.get(
   "/published",
   authMiddleware,
   getPublishedQuizzes
+);
+
+router.get(
+  "/:id/questions",
+  authMiddleware,
+  getPublishedQuizQuestions
 );
 
 router.get(

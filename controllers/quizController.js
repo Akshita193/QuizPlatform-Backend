@@ -204,6 +204,78 @@ const getPublishedQuizzes = async (req, res) => {
   }
 };
 
+// Get questions for a published quiz for students
+const getPublishedQuizQuestions = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First check that the quiz exists and is published
+    const quizResult = await pool.query(
+      `SELECT id, title, description
+       FROM quizzes
+       WHERE id = $1
+         AND is_published = true`,
+      [id]
+    );
+
+    if (quizResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Published quiz not found",
+      });
+    }
+
+    const quiz = quizResult.rows[0];
+
+    // Get questions and options
+    const result = await pool.query(
+      `SELECT
+        q.id AS question_id,
+        q.question_text,
+        o.id AS option_id,
+        o.option_text
+       FROM questions q
+       LEFT JOIN options o
+         ON q.id = o.question_id
+       WHERE q.quiz_id = $1
+       ORDER BY q.id ASC, o.id ASC`,
+      [id]
+    );
+
+    const questions = {};
+
+    result.rows.forEach((row) => {
+      if (!questions[row.question_id]) {
+        questions[row.question_id] = {
+          id: row.question_id,
+          question_text: row.question_text,
+          options: [],
+        };
+      }
+
+      if (row.option_id) {
+        questions[row.question_id].options.push({
+          id: row.option_id,
+          option_text: row.option_text,
+        });
+      }
+    });
+
+    res.status(200).json({
+      quiz,
+      questions: Object.values(questions),
+    });
+  } catch (error) {
+    console.error(
+      "Get published quiz questions error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createQuiz,
   updateQuiz,
@@ -211,4 +283,5 @@ module.exports = {
   publishQuiz,
   getQuizzes,
   getPublishedQuizzes,
+  getPublishedQuizQuestions,
 };
