@@ -5,15 +5,24 @@ const {
   updateQuiz,
   deleteQuiz,
   publishQuiz,
-  getQuizzes,   
+  getQuizzes,
   getPublishedQuizzes,
   getPublishedQuizQuestions,
+  checkQuizAttempt,
+  submitQuiz,
+  getMyResults,
+  getAllResults,
 } = require("../controllers/quizController");
 
 const authMiddleware = require("../middleware/authMiddleware");
 const adminMiddleware = require("../middleware/adminMiddleware");
 
 const router = express.Router();
+
+
+// =========================
+// ADMIN ROUTES
+// =========================
 
 router.post(
   "/",
@@ -28,7 +37,6 @@ router.put(
   adminMiddleware,
   updateQuiz
 );
-
 
 router.delete(
   "/:id",
@@ -45,22 +53,59 @@ router.patch(
 );
 
 router.get(
+  "/",
+  authMiddleware,
+  adminMiddleware,
+  getQuizzes
+);
+
+
+// =========================
+// STUDENT ROUTES
+// =========================
+
+// Published quizzes
+router.get(
   "/published",
   authMiddleware,
   getPublishedQuizzes
 );
 
+// Student's results
+router.get(
+  "/my-results",
+  authMiddleware,
+  getMyResults
+);
+
+// Check whether quiz was already attempted
+router.get(
+  "/:id/attempt",
+  authMiddleware,
+  checkQuizAttempt
+);
+
+// Get questions
 router.get(
   "/:id/questions",
   authMiddleware,
   getPublishedQuizQuestions
 );
 
+// Submit quiz
+router.post(
+  "/:id/submit",
+  authMiddleware,
+  submitQuiz
+);
+
+// Get all student quiz results for admin
 router.get(
-  "/",
+  "/results",
   authMiddleware,
   adminMiddleware,
-  getQuizzes
+  getAllResults
 );
+
 
 module.exports = router;

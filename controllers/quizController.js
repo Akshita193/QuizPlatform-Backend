@@ -3,22 +3,47 @@ const pool = require("../config/db");
 //create quiz
 const createQuiz = async (req, res) => {
   try {
-    const { title, description } = req.body;
-
+    const {
+  title,
+  description,
+  duration_minutes,
+} = req.body;
     // Check required field
     if (!title) {
       return res.status(400).json({
         message: "Quiz title is required",
       });
     }
+    if (
+  !duration_minutes ||
+  Number(duration_minutes) <= 0
+) {
+  return res.status(400).json({
+    message: "Quiz duration must be greater than 0 minutes",
+  });
+}
 
     // Create quiz
     const result = await pool.query(
-      `INSERT INTO quizzes (title, description, created_by)
-       VALUES ($1, $2, $3)
-       RETURNING id, title, description, created_by, is_published, created_at, updated_at`,
-      [title, description || null, req.user.id]
-    );
+  `INSERT INTO quizzes
+    (title, description, duration_minutes, created_by)
+   VALUES ($1, $2, $3, $4)
+   RETURNING
+    id,
+    title,
+    description,
+    duration_minutes,
+    created_by,
+    is_published,
+    created_at,
+    updated_at`,
+  [
+    title,
+    description || null,
+    Number(duration_minutes),
+    req.user.id,
+  ]
+);
 
     res.status(201).json({
       message: "Quiz created successfully",
@@ -37,7 +62,11 @@ const createQuiz = async (req, res) => {
 const updateQuiz = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description } = req.body;
+    const {
+  title,
+  description,
+  duration_minutes,
+} = req.body;
 
     if (!title) {
       return res.status(400).json({
@@ -45,15 +74,38 @@ const updateQuiz = async (req, res) => {
       });
     }
 
+    if (
+  !duration_minutes ||
+  Number(duration_minutes) <= 0
+) {
+  return res.status(400).json({
+    message: "Quiz duration must be greater than 0 minutes",
+  });
+}
+
     const result = await pool.query(
-      `UPDATE quizzes
-       SET title = $1,
-           description = $2,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, title, description, created_by, is_published, created_at, updated_at`,
-      [title, description || null, id]
-    );
+  `UPDATE quizzes
+   SET title = $1,
+       description = $2,
+       duration_minutes = $3,
+       updated_at = CURRENT_TIMESTAMP
+   WHERE id = $4
+   RETURNING
+    id,
+    title,
+    description,
+    duration_minutes,
+    created_by,
+    is_published,
+    created_at,
+    updated_at`,
+  [
+    title,
+    description || null,
+    Number(duration_minutes),
+    id,
+  ]
+);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -183,6 +235,7 @@ const getPublishedQuizzes = async (req, res) => {
         id,
         title,
         description,
+        duration_minutes,
         created_by,
         is_published,
         created_at,
@@ -211,8 +264,12 @@ const getPublishedQuizQuestions = async (req, res) => {
 
     // First check that the quiz exists and is published
     const quizResult = await pool.query(
-      `SELECT id, title, description
-       FROM quizzes
+      `SELECT
+  id,
+  title,
+  description,
+  duration_minutes
+FROM quizzes
        WHERE id = $1
          AND is_published = true`,
       [id]
@@ -276,6 +333,346 @@ const getPublishedQuizQuestions = async (req, res) => {
   }
 };
 
+// ==========================================
+// CHECK IF STUDENT ALREADY ATTEMPTED QUIZ
+// ==========================================
+
+const checkQuizAttempt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const studentId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT
+        id,
+        quiz_id,
+        student_id,
+        score,
+        total_questions,
+        submitted_at
+       FROM quiz_attempts
+       WHERE quiz_id = $1
+       AND student_id = $2`,
+      [id, studentId]
+    );
+
+    if (result.rows.length > 0) {
+      return res.status(200).json({
+        attempted: true,
+        attempt: result.rows[0],
+      });
+    }
+
+    res.status(200).json({
+      attempted: false,
+      attempt: null,
+    });
+  } catch (error) {
+    console.error("Check quiz attempt error:", error);
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+
+// ==========================================
+// SUBMIT QUIZ
+// ==========================================
+
+const submitQuiz = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { id } = req.params;
+    const studentId = req.user.id;
+    const { answers } = req.body;
+
+    if (!Array.isArray(answers)) {
+      return res.status(400).json({
+        message: "Answers must be an array",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    // Check if student already submitted this quiz
+    const existingAttempt = await client.query(
+      `SELECT id
+       FROM quiz_attempts
+       WHERE quiz_id = $1
+       AND student_id = $2`,
+      [id, studentId]
+    );
+
+    if (existingAttempt.rows.length > 0) {
+      await client.query("ROLLBACK");
+
+      return res.status(409).json({
+        message: "You have already submitted this quiz.",
+      });
+    }
+
+    // Get all questions and correct options
+    const questionResult = await client.query(
+      `SELECT
+        q.id AS question_id,
+        o.id AS correct_option_id
+       FROM questions q
+       JOIN options o
+         ON q.id = o.question_id
+       WHERE q.quiz_id = $1
+       AND o.is_correct = true
+       ORDER BY q.id`,
+      [id]
+    );
+
+    const questions = questionResult.rows;
+
+    if (questions.length === 0) {
+      await client.query("ROLLBACK");
+
+      return res.status(400).json({
+        message: "This quiz has no questions.",
+      });
+    }
+
+    let score = 0;
+
+    for (const question of questions) {
+      const studentAnswer = answers.find(
+        (answer) =>
+          Number(answer.question_id) ===
+          Number(question.question_id)
+      );
+
+      const selectedOptionId = studentAnswer
+        ? Number(studentAnswer.selected_option_id)
+        : null;
+
+      const isCorrect =
+        selectedOptionId !== null &&
+        selectedOptionId ===
+          Number(question.correct_option_id);
+
+      if (isCorrect) {
+        score++;
+      }
+    }
+
+    const totalQuestions = questions.length;
+
+    const percentage = Math.round(
+  (score / totalQuestions) * 100
+);
+
+const resultStatus =
+  percentage >= 40 ? "Pass" : "Fail";
+
+    // Store attempt
+    const attemptResult = await client.query(
+  `INSERT INTO quiz_attempts
+  (
+    quiz_id,
+    student_id,
+    score,
+    total_questions,
+    result_status,
+    submitted_at
+  )
+  VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+  RETURNING
+    id,
+    quiz_id,
+    student_id,
+    score,
+    total_questions,
+    result_status,
+    submitted_at`,
+  [
+    id,
+    studentId,
+    score,
+    totalQuestions,
+    resultStatus,
+  ]
+);
+
+    const attempt = attemptResult.rows[0];
+
+    // Store each answer
+    for (const question of questions) {
+      const studentAnswer = answers.find(
+        (answer) =>
+          Number(answer.question_id) ===
+          Number(question.question_id)
+      );
+
+      const selectedOptionId = studentAnswer
+        ? Number(studentAnswer.selected_option_id)
+        : null;
+
+      const isCorrect =
+        selectedOptionId !== null &&
+        selectedOptionId ===
+          Number(question.correct_option_id);
+
+      await client.query(
+        `INSERT INTO quiz_answers
+          (
+            attempt_id,
+            question_id,
+            selected_option_id,
+            is_correct
+          )
+         VALUES ($1, $2, $3, $4)`,
+        [
+          attempt.id,
+          question.question_id,
+          selectedOptionId,
+          isCorrect,
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      message: "Quiz submitted successfully",
+      result: {
+        attempt_id: attempt.id,
+        quiz_id: attempt.quiz_id,
+        score: attempt.score,
+        total_questions: attempt.total_questions,
+        result_status: attempt.result_status,
+        submitted_at: attempt.submitted_at,
+      },
+    });
+  } catch (error) {
+  await client.query("ROLLBACK");
+
+  console.error("=================================");
+  console.error("SUBMIT QUIZ ERROR");
+  console.error("Message:", error.message);
+  console.error("Code:", error.code);
+  console.error("Detail:", error.detail);
+  console.error("Where:", error.where);
+  console.error("Stack:", error.stack);
+  console.error("=================================");
+
+  res.status(500).json({
+    message: error.message,
+  });
+} finally {
+  client.release();
+}
+};
+// ==========================================
+// GET STUDENT RESULTS
+// ==========================================
+// ==========================================
+// GET STUDENT RESULTS
+// ==========================================
+const getMyResults = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT
+        qa.id AS attempt_id,
+        qa.quiz_id,
+        q.title,
+        q.description,
+        qa.score,
+        qa.total_questions,
+
+        ROUND(
+          (qa.score::decimal / NULLIF(qa.total_questions, 0)) * 100,
+          2
+        ) AS percentage,
+
+        CASE
+          WHEN (qa.score::decimal / NULLIF(qa.total_questions, 0)) * 100 >= 40
+          THEN 'PASS'
+          ELSE 'FAIL'
+        END AS status,
+
+        qa.submitted_at
+
+       FROM quiz_attempts qa
+
+       JOIN quizzes q
+         ON q.id = qa.quiz_id
+
+       WHERE qa.student_id = $1
+
+       ORDER BY qa.submitted_at DESC`,
+      [studentId]
+    );
+
+    console.log(
+      "Student results:",
+      result.rows
+    );
+
+    res.status(200).json({
+      results: result.rows,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get my results error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ==========================================
+// GET ALL QUIZ RESULTS FOR ADMIN
+// ==========================================
+
+const getAllResults = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+        qa.id AS id,
+        qa.quiz_id,
+        qa.student_id,
+        u.name AS student_name,
+        u.email AS student_email,
+        q.title AS quiz_title,
+        qa.score,
+        qa.total_questions,
+        qa.submitted_at
+       FROM quiz_attempts qa
+       JOIN users u
+         ON u.id = qa.student_id
+       JOIN quizzes q
+         ON q.id = qa.quiz_id
+       ORDER BY qa.submitted_at DESC`
+    );
+
+    console.log("Admin results:", result.rows);
+
+    res.status(200).json({
+      results: result.rows,
+    });
+
+  } catch (error) {
+    console.error("Get all results error:", error);
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createQuiz,
   updateQuiz,
@@ -284,4 +681,8 @@ module.exports = {
   getQuizzes,
   getPublishedQuizzes,
   getPublishedQuizQuestions,
+  checkQuizAttempt,
+  submitQuiz,
+  getMyResults,
+  getAllResults,
 };
