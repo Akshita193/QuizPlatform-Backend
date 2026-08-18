@@ -13,6 +13,8 @@ const {
   getMyResults,
   getAttemptReview,
   getAllResults,
+  getOverallLeaderboard,
+  getCategoryLeaderboard,
 } = require("../controllers/quizController");
 
 const authMiddleware = require("../middleware/authMiddleware");
@@ -30,6 +32,19 @@ router.post(
   authMiddleware,
   adminMiddleware,
   createQuiz
+);
+
+// Overall leaderboard
+router.get(
+  "/leaderboard/overall",
+  authMiddleware,
+  getOverallLeaderboard
+);
+
+router.get(
+  "/leaderboard/category",
+  authMiddleware,
+  getCategoryLeaderboard
 );
 
 router.put(

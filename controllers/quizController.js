@@ -787,6 +787,204 @@ const getAllResults = async (req, res) => {
   }
 };
 
+// ==========================================
+// DAY 12 - OVERALL LEADERBOARD
+// ==========================================
+
+const getOverallLeaderboard = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id AS student_id,
+        u.name AS student_name,
+
+        COUNT(qa.id)::int AS total_attempts,
+
+        ROUND(
+          AVG(
+            (qa.score::decimal /
+              NULLIF(qa.total_questions, 0)
+            ) * 100
+          ),
+          2
+        ) AS average_percentage
+
+      FROM users u
+
+      JOIN quiz_attempts qa
+        ON qa.student_id = u.id
+
+      WHERE UPPER(u.role) = 'STUDENT'
+
+      GROUP BY
+        u.id,
+        u.name
+
+      ORDER BY
+        average_percentage DESC,
+        total_attempts DESC,
+        u.name ASC
+    `);
+
+    const leaderboard = result.rows.map(
+      (student, index) => ({
+        rank: index + 1,
+
+        student_id:
+          student.student_id,
+
+        student_name:
+          student.student_name,
+
+        total_attempts:
+          student.total_attempts,
+
+        average_percentage:
+          Number(
+            student.average_percentage
+          ),
+      })
+    );
+
+    res.status(200).json({
+      leaderboard,
+    });
+
+  } catch (error) {
+    console.error(
+      "Get overall leaderboard error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ==========================================
+// DAY 12 - CATEGORY LEADERBOARD
+// ==========================================
+
+const getCategoryLeaderboard = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.id AS category_id,
+        c.name AS category_name,
+
+        u.id AS student_id,
+        u.name AS student_name,
+
+        COUNT(qa_answer.id)::int AS total_answers,
+
+        SUM(
+          CASE
+            WHEN qa_answer.is_correct = true
+            THEN 1
+            ELSE 0
+          END
+        )::int AS correct_answers,
+
+        ROUND(
+          (
+            SUM(
+              CASE
+                WHEN qa_answer.is_correct = true
+                THEN 1
+                ELSE 0
+              END
+            )::decimal
+            /
+            NULLIF(
+              COUNT(qa_answer.id),
+              0
+            )
+          ) * 100,
+          2
+        ) AS percentage
+
+      FROM quiz_answers qa_answer
+
+      JOIN quiz_attempts qa
+        ON qa.id = qa_answer.attempt_id
+
+      JOIN users u
+        ON u.id = qa.student_id
+
+      JOIN questions q
+        ON q.id = qa_answer.question_id
+
+      JOIN categories c
+        ON c.id = q.category_id
+
+      WHERE
+        q.category_id IS NOT NULL
+        AND UPPER(u.role) = 'STUDENT'
+
+      GROUP BY
+        c.id,
+        c.name,
+        u.id,
+        u.name
+
+      ORDER BY
+        c.name ASC,
+        percentage DESC,
+        correct_answers DESC,
+        u.name ASC
+    `);
+
+    const categoryGroups = {};
+
+    result.rows.forEach((row) => {
+      if (!categoryGroups[row.category_id]) {
+        categoryGroups[row.category_id] = {
+          category_id: row.category_id,
+          category_name: row.category_name,
+          leaderboard: [],
+        };
+      }
+
+      categoryGroups[row.category_id].leaderboard.push({
+        student_id: row.student_id,
+        student_name: row.student_name,
+        total_answers: row.total_answers,
+        correct_answers: row.correct_answers,
+        percentage: Number(row.percentage),
+      });
+    });
+
+    const categories = Object.values(
+      categoryGroups
+    ).map((category) => ({
+      ...category,
+
+      leaderboard:
+        category.leaderboard.map(
+          (student, index) => ({
+            rank: index + 1,
+            ...student,
+          })
+        ),
+    }));
+
+    res.status(200).json({
+      categories,
+    });
+
+  } catch (error) {
+    console.error(
+      "Get category leaderboard error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createQuiz,
   updateQuiz,
@@ -800,4 +998,6 @@ module.exports = {
   getMyResults,
   getAttemptReview,
   getAllResults,
+  getOverallLeaderboard,
+  getCategoryLeaderboard,
 };
