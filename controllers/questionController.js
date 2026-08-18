@@ -6,11 +6,12 @@ const createQuestion = async (req, res) => {
 
   try {
     const {
-      quiz_id,
-      category_id,
-      question_text,
-      options,
-    } = req.body;
+  quiz_id,
+  category_id,
+  question_text,
+  explanation,
+  options,
+} = req.body;
 
     // Validation
     if (!quiz_id || !question_text || !options) {
@@ -43,15 +44,27 @@ const createQuestion = async (req, res) => {
     // Create question
     const questionResult = await client.query(
       `INSERT INTO questions
-        (quiz_id, category_id, question_text)
-       VALUES ($1, $2, $3)
-       RETURNING id, quiz_id, category_id, question_text,
-                 created_at, updated_at`,
-      [
-        quiz_id,
-        category_id || null,
-        question_text,
-      ]
+  (
+    quiz_id,
+    category_id,
+    question_text,
+    explanation
+  )
+ VALUES ($1, $2, $3, $4)
+ RETURNING
+    id,
+    quiz_id,
+    category_id,
+    question_text,
+    explanation,
+    created_at,
+    updated_at`,
+[
+  quiz_id,
+  category_id || null,
+  question_text,
+  explanation || null,
+]
     );
 
     const question = questionResult.rows[0];
@@ -105,6 +118,7 @@ const getQuestions = async (req, res) => {
         q.quiz_id,
         q.category_id,
         q.question_text,
+        q.explanation,
         q.created_at,
         q.updated_at,
         o.id AS option_id,
@@ -125,6 +139,7 @@ const getQuestions = async (req, res) => {
           quiz_id: row.quiz_id,
           category_id: row.category_id,
           question_text: row.question_text,
+          explanation: row.explanation,
           created_at: row.created_at,
           updated_at: row.updated_at,
           options: [],
@@ -159,10 +174,11 @@ const updateQuestion = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      category_id,
-      question_text,
-      options,
-    } = req.body;
+  category_id,
+  question_text,
+  explanation,
+  options,
+} = req.body;
 
     if (!question_text || !options) {
       return res.status(400).json({
@@ -205,17 +221,25 @@ const updateQuestion = async (req, res) => {
     // Update question
     const questionResult = await client.query(
       `UPDATE questions
-       SET category_id = $1,
-           question_text = $2,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, quiz_id, category_id, question_text,
-                 created_at, updated_at`,
-      [
-        category_id || null,
-        question_text,
-        id,
-      ]
+ SET category_id = $1,
+     question_text = $2,
+     explanation = $3,
+     updated_at = CURRENT_TIMESTAMP
+ WHERE id = $4
+ RETURNING
+    id,
+    quiz_id,
+    category_id,
+    question_text,
+    explanation,
+    created_at,
+    updated_at`,
+[
+  category_id || null,
+  question_text,
+  explanation || null,
+  id,
+]
     );
 
     // Delete old options

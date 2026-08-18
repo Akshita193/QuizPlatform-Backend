@@ -634,6 +634,120 @@ const getMyResults = async (req, res) => {
 };
 
 // ==========================================
+// GET STUDENT ATTEMPT REVIEW
+// ==========================================
+
+const getAttemptReview = async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const studentId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT
+        qa.id AS attempt_id,
+        qa.quiz_id,
+        quiz.title AS quiz_title,
+        qa.score,
+        qa.total_questions,
+        qa.result_status,
+        qa.submitted_at,
+
+        q.id AS question_id,
+        q.question_text,
+        q.explanation,
+
+        answer.selected_option_id,
+        selected_option.option_text AS selected_option_text,
+
+        correct_option.id AS correct_option_id,
+        correct_option.option_text AS correct_option_text,
+
+        answer.is_correct
+
+       FROM quiz_attempts qa
+
+       JOIN quizzes quiz
+         ON quiz.id = qa.quiz_id
+
+       JOIN quiz_answers answer
+         ON answer.attempt_id = qa.id
+
+       JOIN questions q
+         ON q.id = answer.question_id
+
+       LEFT JOIN options selected_option
+         ON selected_option.id = answer.selected_option_id
+
+       JOIN options correct_option
+         ON correct_option.question_id = q.id
+        AND correct_option.is_correct = true
+
+       WHERE qa.id = $1
+         AND qa.student_id = $2
+
+       ORDER BY q.id ASC`,
+      [attemptId, studentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Attempt not found",
+      });
+    }
+
+    const firstRow = result.rows[0];
+
+    const review = result.rows.map((row) => ({
+  question_id: row.question_id,
+  question_text: row.question_text,
+
+  explanation: row.explanation,
+
+  selected_option_id:
+    row.selected_option_id,
+
+  selected_option_text:
+    row.selected_option_text,
+
+  correct_option_id:
+    row.correct_option_id,
+
+  correct_option_text:
+    row.correct_option_text,
+
+  is_correct: row.is_correct,
+}));
+
+    res.status(200).json({
+      attempt: {
+        attempt_id: firstRow.attempt_id,
+        quiz_id: firstRow.quiz_id,
+        quiz_title: firstRow.quiz_title,
+        score: firstRow.score,
+        total_questions:
+          firstRow.total_questions,
+        result_status:
+          firstRow.result_status,
+        submitted_at:
+          firstRow.submitted_at,
+      },
+
+      review,
+    });
+
+  } catch (error) {
+    console.error(
+      "Get attempt review error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ==========================================
 // GET ALL QUIZ RESULTS FOR ADMIN
 // ==========================================
 
@@ -684,5 +798,6 @@ module.exports = {
   checkQuizAttempt,
   submitQuiz,
   getMyResults,
+  getAttemptReview,
   getAllResults,
 };

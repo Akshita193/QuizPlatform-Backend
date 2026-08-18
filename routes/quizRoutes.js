@@ -11,6 +11,7 @@ const {
   checkQuizAttempt,
   submitQuiz,
   getMyResults,
+  getAttemptReview,
   getAllResults,
 } = require("../controllers/quizController");
 
@@ -76,6 +77,13 @@ router.get(
   "/my-results",
   authMiddleware,
   getMyResults
+);
+
+// Review one submitted attempt
+router.get(
+  "/attempts/:attemptId/review",
+  authMiddleware,
+  getAttemptReview
 );
 
 // Check whether quiz was already attempted
