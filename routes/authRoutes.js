@@ -7,6 +7,8 @@ const studentMiddleware = require("../middleware/studentMiddleware");
 const {
   registerUser,
   loginUser,
+  resetPassword,
+  createAdmin,
 } = require("../controllers/authController");
 
 const router = express.Router();
@@ -56,3 +58,15 @@ router.post("/logout", authMiddleware, (req, res) => {
     message: "Logout successful",
   });
 });
+
+router.post(
+  "/reset-password",
+  resetPassword
+);
+
+router.post(
+  "/create-admin",
+  authMiddleware,
+  adminMiddleware,
+  createAdmin
+);

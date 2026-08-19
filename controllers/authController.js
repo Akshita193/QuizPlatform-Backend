@@ -124,7 +124,132 @@ const loginUser = async (req, res) => {
   }
 };
 
+const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        message: "Email and new password are required",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 6 characters long",
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id
+       FROM users
+       WHERE email = $1`,
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "No account found with this email",
+      });
+    }
+
+    const hashedPassword =
+      await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      `UPDATE users
+       SET password = $1
+       WHERE email = $2`,
+      [hashedPassword, email]
+    );
+
+    res.status(200).json({
+      message:
+        "Password reset successfully. You can now login.",
+    });
+  } catch (error) {
+    console.error(
+      "Reset password error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+const createAdmin = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "Name, email and password are required",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    const existingUser = await pool.query(
+      `SELECT id
+       FROM users
+       WHERE email = $1`,
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        message: "User with this email already exists",
+      });
+    }
+
+    const hashedPassword =
+      await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users
+        (name, email, password, role, status)
+       VALUES ($1, $2, $3, 'ADMIN', true)
+       RETURNING
+         id,
+         name,
+         email,
+         role,
+         status,
+         created_at`,
+      [
+        name.trim(),
+        email.trim().toLowerCase(),
+        hashedPassword,
+      ]
+    );
+
+    res.status(201).json({
+      message: "Admin created successfully",
+      user: result.rows[0],
+    });
+
+  } catch (error) {
+    console.error(
+      "Create admin error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
+  resetPassword,
+  createAdmin,
 };
